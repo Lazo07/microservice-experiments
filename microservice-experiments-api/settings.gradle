@@ -1,0 +1,3 @@
+rootProject.name = 'microservice-experiments-api'
+include 'common'
+include 'command-service'

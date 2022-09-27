@@ -1,0 +1,10 @@
+plugins {
+    id 'application'
+}
+
+application {
+    mainClass = 'com.experiments.microservice.commandservice'
+}
+
+dependencies {
+}
