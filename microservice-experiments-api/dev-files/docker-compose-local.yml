@@ -1,0 +1,177 @@
+version: '2.3'
+
+services:
+  db:
+    image: postgres:14.1-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASS=masterp
+      - POSTGRES_DB=postgres
+      - APP_DB_USER=app_usr_non
+      - APP_DB_PASS=local_pass
+      - APP_DB_NAME=appdb
+      - APP_DB_SCHEMA_NAME=appdb_schema
+    ports:
+      - '5432:5432'
+    volumes:
+      # Note: These 2 volumes can't run in parallel, choose one that best fits the purpose.
+      # 1. Use this volume if you want to setup DBs from scratch for every new docker db instance.
+      # It will run 01-init.sh ang other files under ./db folder:
+      - ./db:/docker-entrypoint.initdb.d/
+      #2. Use this to persist DB data on the host machine despite deleting instances and re-running docker compose up.
+      # Since this will not utilize 01-init.sh, copy-paste the SQL scripts from there and execute manually via your DB IDEs.
+      #- db:/var/lib/postgresql/data
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - internal
+    ports:
+      - 22181:2181
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1k"
+        max-file: "3"
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    links:
+      - zookeeper
+    depends_on:
+      - zookeeper
+    ports:
+      - 29092:29092
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 29092"]
+      interval: 60s
+      timeout: 30s
+      retries: 12
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_SCHEMA_REGISTRY_URL: "schemaregistry:8082"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1k"
+        max-file: "3"
+
+  kafka-2:
+    image: confluentinc/cp-kafka:latest
+    links:
+      - zookeeper
+    depends_on:
+      - zookeeper
+    ports:
+      - 29093:29093
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 29092"]
+      interval: 60s
+      timeout: 30s
+      retries: 12
+    environment:
+      KAFKA_BROKER_ID: 2
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:9093,PLAINTEXT_HOST://localhost:29093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_SCHEMA_REGISTRY_URL: "schemaregistry:8082"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1k"
+        max-file: "3"
+
+  kafka-3:
+    image: confluentinc/cp-kafka:latest
+    links:
+      - zookeeper
+    depends_on:
+      - zookeeper
+    ports:
+      - 29094:29094
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 29092"]
+      interval: 60s
+      timeout: 30s
+      retries: 12
+    environment:
+      KAFKA_BROKER_ID: 3
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:9094,PLAINTEXT_HOST://localhost:29094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_SCHEMA_REGISTRY_URL: "schemaregistry:8082"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1k"
+        max-file: "3"
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:5.4.0
+    hostname: schema-registry
+    container_name: schema-registry
+    depends_on:
+      - zookeeper
+      - kafka
+      - kafka-2
+      - kafka-3
+    ports:
+      - "8082:8082"
+    networks:
+      - internal
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL: "zookeeper:2181"
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8082
+
+  control-center:
+    image: confluentinc/cp-enterprise-control-center:5.4.0
+    hostname: control-center
+    container_name: control-center
+    depends_on:
+      - zookeeper
+      - kafka
+      - kafka-2
+      - kafka-3
+      - schema-registry
+    ports:
+      - "9021:9021"
+    networks:
+      - internal
+    environment:
+      CONTROL_CENTER_BOOTSTRAP_SERVERS: 'kafka:9092,kafka-2:9093,kafka-3:9094'
+      CONTROL_CENTER_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      CONTROL_CENTER_SCHEMA_REGISTRY_URL: "schema-registry:8082"
+      CONTROL_CENTER_REPLICATION_FACTOR: 1
+      CONTROL_CENTER_INTERNAL_TOPICS_PARTITIONS: 1
+      CONTROL_CENTER_MONITORING_INTERCEPTOR_TOPIC_PARTITIONS: 1
+      CONFLUENT_METRICS_TOPIC_REPLICATION: 1
+      PORT: 9021
+
+networks:
+  internal:
+
+volumes:
+  db:
+    driver: local
