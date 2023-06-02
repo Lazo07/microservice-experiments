@@ -1,9 +1,11 @@
 
 plugins {
-    id 'org.springframework.boot' version '2.7.3'
-    id 'io.spring.dependency-management' version '1.0.13.RELEASE'
-    id 'com.google.cloud.tools.jib' version '3.3.0'
+    id 'org.springframework.boot' version '2.7.3' apply false
+    id 'io.spring.dependency-management' version '1.0.13.RELEASE' apply false
+    id 'com.google.cloud.tools.jib' version '3.3.0' apply false
     id 'java'
+    id 'idea'
+    id 'groovy'
 }
 
 allprojects {
@@ -14,31 +16,61 @@ allprojects {
 
     apply plugin: 'org.springframework.boot'
     apply plugin: 'io.spring.dependency-management'
-    apply plugin: 'java'
-
-    configurations {
-        compileOnly {
-            extendsFrom annotationProcessor
-        }
-    }
+    apply plugin: 'idea'
 
     repositories {
         mavenCentral()
     }
+}
+
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'groovy'
+
+    //Test cases config
+    test.outputs.upToDateWhen { false }
+    test.testLogging {events 'passed', 'skipped', 'failed'}
+
+    dependencyManagement {
+        imports {
+            mavenBom org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES
+            mavenBom 'org.springframework.cloud:spring-cloud-dependencies:2021.0.3'
+        }
+
+        dependencies {
+            dependency 'org.projectlombok:lombok:1.18.22'
+            dependency 'org.spockframework:spock-core:2.0-groovy-2.5'
+            dependency 'org.spockframework:spock-spring:2.0-groovy-3.0'
+            dependency 'org.codehaus.groovy:groovy-all:3.0.0'
+            dependency 'org.mockito:mockito-inline:3.6.0'
+        }
+    }
 
     dependencies {
         implementation 'org.springframework.boot:spring-boot-starter'
+        annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+        // Lombok support
         compileOnly 'org.projectlombok:lombok'
         annotationProcessor 'org.projectlombok:lombok'
-        testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    }
 
-    tasks.named('test') {
-        useJUnitPlatform()
+        // Spock Testing
+        testImplementation 'org.spockframework:spock-core'
+        testImplementation 'org.spockframework:spock-spring'
+        testImplementation 'org.codehaus.groovy:groovy-all'
+
+        // Mockito
+        // Note: Mockito 3+ needs JUnit5.
+        // Spring Boot 2+ uses JUnit5 by default, so there's no need to explicitly declare Junit5 dependencies.
+        testImplementation 'org.mockito:mockito-inline'
     }
 
     if (project.name.contains('command-service')){
         apply plugin: 'com.google.cloud.tools.jib'
+
+        tasks.named('test') {
+            useJUnitPlatform()
+        }
 
         jib {
             containerizingMode = 'exploded'
@@ -61,6 +93,7 @@ allprojects {
         }
     }
 }
+
 
 bootJar {
     enabled = false
